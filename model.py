@@ -16,7 +16,7 @@ use_cuda = torch.cuda.is_available()
 device = torch.device("cuda" if use_cuda else "cpu")
 
 valid_size = 1024 
-batch_size = 16
+batch_size = 32 
 
 '''Basic neural network architecture (from pytorch doc).'''
 class Net(nn.Module):
@@ -115,7 +115,7 @@ def test_natural(net, test_loader):
 
     return 100 * correct / total
 
-def get_train_loader(dataset, valid_size=1024, batch_size=16):
+def get_train_loader(dataset, valid_size=1024, batch_size=32):
     '''Split dataset into [train:valid] and return a DataLoader for the training part.'''
 
     indices = list(range(len(dataset)))
@@ -124,7 +124,7 @@ def get_train_loader(dataset, valid_size=1024, batch_size=16):
 
     return train
 
-def get_validation_loader(dataset, valid_size=1024, batch_size=16):
+def get_validation_loader(dataset, valid_size=1024, batch_size=32):
     '''Split dataset into [train:valid] and return a DataLoader for the validation part.'''
 
     indices = list(range(len(dataset)))
