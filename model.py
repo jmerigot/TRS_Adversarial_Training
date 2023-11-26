@@ -96,6 +96,23 @@ def train_model(net, train_loader, pth_filename, num_epochs):
 
     net.save(pth_filename)
     print('Model saved in {}'.format(pth_filename))
+    
+def pgd_attack(model, images, labels, eps=0.03, alpha=0.01, iters=40):
+    original_images = images.clone().detach()
+    images = images.clone().detach().to(device)
+    labels = labels.clone().detach().to(device)
+    
+    for _ in range(iters):
+        images.requires_grad = True
+        outputs = model(images)
+        model.zero_grad()
+        loss = F.nll_loss(outputs, labels)
+        loss.backward()
+        adv_images = images + alpha * images.grad.sign()
+        eta = torch.clamp(adv_images - original_images, min=-eps, max=eps)
+        images = torch.clamp(original_images + eta, min=0, max=1).detach_()
+        
+    return images
 
 def test_natural(net, test_loader):
     '''Basic testing function.'''

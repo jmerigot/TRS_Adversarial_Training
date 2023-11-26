@@ -7,6 +7,8 @@ import importlib.abc
 import torch, torchvision
 import torchvision.transforms as transforms
 
+from model import pgd_attack
+
 torch.seed()
 use_cuda = torch.cuda.is_available()
 device = torch.device("cuda" if use_cuda else "cpu")
@@ -42,6 +44,19 @@ def test_natural(net, test_loader, num_samples):
 
     return 100 * correct / total
 
+def test_adversarial(net, test_loader, eps=0.03, alpha=0.01, iters=40):
+    correct = 0
+    total = 0
+    for i, data in enumerate(test_loader, 0):
+        images, labels = data[0].to(device), data[1].to(device)
+        adv_images = pgd_attack(net, images, labels, eps, alpha, iters)
+        outputs = net(adv_images)
+        _, predicted = torch.max(outputs.data, 1)
+        total += labels.size(0)
+        correct += (predicted == labels).sum().item()
+
+    return 100 * correct / total
+
 def get_validation_loader(dataset, valid_size=1024, batch_size=32):
     '''Split dataset into [train:valid] and return a DataLoader for the validation part.'''
 
@@ -73,6 +88,9 @@ def main():
 
     acc_nat = test_natural(net, valid_loader, num_samples = args.num_samples)
     print("Model nat accuracy (test): {}".format(acc_nat))
+    
+    acc_adv = test_adversarial(net, valid_loader)
+    print("Model adversarial accuracy (valid): {}".format(acc_adv))
 
 if __name__ == "__main__":
     main()
