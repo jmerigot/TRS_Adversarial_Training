@@ -6,6 +6,7 @@ import importlib
 import importlib.abc
 import torch, torchvision
 import torchvision.transforms as transforms
+from tqdm import tqdm
 
 from model import pgd_attack
 
@@ -44,10 +45,10 @@ def test_natural(net, test_loader, num_samples):
 
     return 100 * correct / total
 
-def test_adversarial(net, test_loader, eps=0.03, alpha=0.01, iters=40):
+def test_adversarial(net, test_loader, eps=0.05, alpha=0.01, iters=40):
     correct = 0
     total = 0
-    for i, data in enumerate(test_loader, 0):
+    for i, data in tqdm(enumerate(test_loader, 0)):
         images, labels = data[0].to(device), data[1].to(device)
         adv_images = pgd_attack(net, images, labels, eps, alpha, iters)
         outputs = net(adv_images)

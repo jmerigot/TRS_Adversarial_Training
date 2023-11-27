@@ -97,7 +97,38 @@ def train_model(net, train_loader, pth_filename, num_epochs):
     net.save(pth_filename)
     print('Model saved in {}'.format(pth_filename))
     
-def pgd_attack(model, images, labels, eps=0.03, alpha=0.01, iters=40):
+def train_model_adversarial(net, train_loader, pth_filename, num_epochs, eps=0.05, alpha=0.01, iters=40):
+    print("Starting training with adversarial examples")
+    criterion = nn.NLLLoss()
+    optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
+
+    for epoch in range(num_epochs):  
+        running_loss = 0.0
+        for i, data in enumerate(train_loader, 0):
+            inputs, labels = data[0].to(device), data[1].to(device)
+
+            # Generate adversarial examples
+            adv_inputs = pgd_attack(net, inputs, labels, eps, alpha, iters)
+
+            # Train on both natural and adversarial examples
+            for input_set in [inputs, adv_inputs]:
+                optimizer.zero_grad()
+                outputs = net(input_set)
+                loss = criterion(outputs, labels)
+                loss.backward()
+                optimizer.step()
+
+            # print statistics
+            running_loss += loss.item()
+            if i % 500 == 499:
+                print('[%d, %5d] loss: %.3f' % (epoch + 1, i + 1, running_loss / 1000))
+                running_loss = 0.0
+
+    net.save(pth_filename)
+    print('Finished Adversarial Training')
+
+    
+def pgd_attack(model, images, labels, eps=0.05, alpha=0.01, iters=40):
     original_images = images.clone().detach()
     images = images.clone().detach().to(device)
     labels = labels.clone().detach().to(device)
@@ -121,7 +152,7 @@ def test_natural(net, test_loader):
     total = 0
     # since we're not training, we don't need to calculate the gradients for our outputs
     with torch.no_grad():
-        for i,data in enumerate(test_loader, 0):
+        for i, data in enumerate(test_loader, 0):
             images, labels = data[0].to(device), data[1].to(device)
             # calculate outputs by running images through the network
             outputs = net(images)
@@ -179,7 +210,8 @@ def main():
         train_transform = transforms.Compose([transforms.ToTensor()]) 
         cifar = torchvision.datasets.CIFAR10('./data/', download=True, transform=train_transform)
         train_loader = get_train_loader(cifar, valid_size, batch_size=batch_size)
-        train_model(net, train_loader, args.model_file, args.num_epochs)
+        #train_model(net, train_loader, args.model_file, args.num_epochs)
+        train_model_adversarial(net, train_loader, args.model_file, args.num_epochs)
         print("Model save to '{}'.".format(args.model_file))
 
     #### Model testing
