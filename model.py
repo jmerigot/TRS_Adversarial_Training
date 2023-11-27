@@ -9,6 +9,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 import torch.utils.data
 import torchvision.transforms as transforms
+from tqdm import tqdm
 
 
 
@@ -16,7 +17,7 @@ use_cuda = torch.cuda.is_available()
 device = torch.device("cuda" if use_cuda else "cpu")
 
 valid_size = 1024 
-batch_size = 32 
+batch_size = 16
 
 '''Basic neural network architecture (from pytorch doc).'''
 class Net(nn.Module):
@@ -102,9 +103,10 @@ def train_model_adversarial(net, train_loader, pth_filename, num_epochs, eps=0.0
     criterion = nn.NLLLoss()
     optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
 
-    for epoch in range(num_epochs):  
+    for epoch in tqdm(range(num_epochs)):  
+        
         running_loss = 0.0
-        for i, data in enumerate(train_loader, 0):
+        for i, data in tqdm(enumerate(train_loader, 0)):
             inputs, labels = data[0].to(device), data[1].to(device)
 
             # Generate adversarial examples
@@ -163,7 +165,7 @@ def test_natural(net, test_loader):
 
     return 100 * correct / total
 
-def get_train_loader(dataset, valid_size=1024, batch_size=32):
+def get_train_loader(dataset, valid_size=1024, batch_size=16):
     '''Split dataset into [train:valid] and return a DataLoader for the training part.'''
 
     indices = list(range(len(dataset)))
@@ -172,7 +174,7 @@ def get_train_loader(dataset, valid_size=1024, batch_size=32):
 
     return train
 
-def get_validation_loader(dataset, valid_size=1024, batch_size=32):
+def get_validation_loader(dataset, valid_size=1024, batch_size=16):
     '''Split dataset into [train:valid] and return a DataLoader for the validation part.'''
 
     indices = list(range(len(dataset)))
