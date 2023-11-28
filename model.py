@@ -98,7 +98,7 @@ def train_model(net, train_loader, pth_filename, num_epochs):
     net.save(pth_filename)
     print('Model saved in {}'.format(pth_filename))
     
-def train_model_adversarial(net, train_loader, pth_filename, num_epochs, eps=0.05, alpha=0.01, iters=40):
+def train_model_adversarial(net, train_loader, pth_filename, num_epochs, eps=0.3, alpha=0.01, iters=40):
     print("Starting training with adversarial examples")
     criterion = nn.NLLLoss()
     optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
@@ -130,7 +130,7 @@ def train_model_adversarial(net, train_loader, pth_filename, num_epochs, eps=0.0
     print('Finished Adversarial Training')
 
     
-def pgd_attack(model, images, labels, eps=0.05, alpha=0.01, iters=40):
+def pgd_attack(model, images, labels, eps=0.3, alpha=0.01, iters=40):
     original_images = images.clone().detach()
     images = images.clone().detach().to(device)
     labels = labels.clone().detach().to(device)

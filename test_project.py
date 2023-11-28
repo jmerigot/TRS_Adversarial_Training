@@ -45,16 +45,29 @@ def test_natural(net, test_loader, num_samples):
 
     return 100 * correct / total
 
-def test_adversarial(net, test_loader, eps=0.05, alpha=0.01, iters=40):
+def test_adversarial(net, test_loader, num_samples, eps=0.3, alpha=0.01, iters=40):
     correct = 0
     total = 0
-    for i, data in tqdm(enumerate(test_loader, 0)):
+    """
+        for i, data in tqdm(enumerate(test_loader, 0)):
+            images, labels = data[0].to(device), data[1].to(device)
+            adv_images = pgd_attack(net, images, labels, eps, alpha, iters)
+            outputs = net(adv_images)
+            _, predicted = torch.max(outputs.data, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+    """
+        
+    for i, data in enumerate(test_loader, 0):
         images, labels = data[0].to(device), data[1].to(device)
         adv_images = pgd_attack(net, images, labels, eps, alpha, iters)
-        outputs = net(adv_images)
-        _, predicted = torch.max(outputs.data, 1)
-        total += labels.size(0)
-        correct += (predicted == labels).sum().item()
+        total = 0
+        correct = 0
+        for _ in range(num_samples):
+            outputs = net(adv_images)
+            _, predicted = torch.max(outputs.data, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
 
     return 100 * correct / total
 
@@ -90,7 +103,7 @@ def main():
     acc_nat = test_natural(net, valid_loader, num_samples = args.num_samples)
     print("Model nat accuracy (test): {}".format(acc_nat))
     
-    acc_adv = test_adversarial(net, valid_loader)
+    acc_adv = test_adversarial(net, valid_loader, num_samples = args.num_samples)
     print("Model adversarial accuracy (valid): {}".format(acc_adv))
 
 if __name__ == "__main__":
