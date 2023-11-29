@@ -45,7 +45,7 @@ def test_natural(net, test_loader, num_samples):
 
     return 100 * correct / total
 
-def test_adversarial(net, test_loader, num_samples, eps=0.3, alpha=0.01, iters=40):
+def test_adversarial(net, test_loader, num_samples, eps=0.1, alpha=0.01, iters=40):
     correct = 0
     total = 0
     """
@@ -101,10 +101,10 @@ def main():
     valid_loader = get_validation_loader(cifar, batch_size=args.batch_size)
 
     acc_nat = test_natural(net, valid_loader, num_samples = args.num_samples)
-    print("Model nat accuracy (test): {}".format(acc_nat))
+    print("Model natural accuracy (test): {} %".format(acc_nat))
     
     acc_adv = test_adversarial(net, valid_loader, num_samples = args.num_samples)
-    print("Model adversarial accuracy (valid): {}".format(acc_adv))
+    print("Model adversarial accuracy (valid): {} %".format(acc_adv))
 
 if __name__ == "__main__":
     main()
