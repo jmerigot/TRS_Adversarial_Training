@@ -22,7 +22,7 @@ batch_size = 16
 '''Basic neural network architecture (from pytorch doc).'''
 class Net(nn.Module):
 
-    model_file="models/default_model.pth"
+    model_file="models/adv_model.pth"
     '''This file will be loaded to test your model. Use --model-file to load/store a different model.'''
 
     def __init__(self):
