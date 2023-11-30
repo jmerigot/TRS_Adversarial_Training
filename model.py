@@ -105,13 +105,13 @@ def update_eps_alpha(epoch, num_epochs, eps, final_eps, alpha, final_alpha):
         
     return new_epsilon, new_alpha
     
-def train_model_adversarial(net, train_loader, pth_filename, num_epochs, eps=0.05, alpha=0.01, iters=40, step_size=5, gamma=0.1):
+def train_model_adversarial(net, train_loader, pth_filename, num_epochs, eps=0.05, alpha=0.01, iters=40, step_size=2, gamma=0.5):
     print("Starting training with adversarial examples")
     criterion = nn.NLLLoss()
     optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
     
-    final_eps = 0.2
+    final_eps = 0.1
     final_alpha = 0.03
 
     for epoch in tqdm(range(num_epochs)):  
