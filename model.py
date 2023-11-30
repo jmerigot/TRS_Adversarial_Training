@@ -145,7 +145,7 @@ def train_model_adversarial(net, train_loader, pth_filename, num_epochs, eps=0.0
     print('Finished Adversarial Training')
 
     
-def pgd_attack(model, images, labels, eps=0.1, alpha=0.01, iters=40):
+def pgd_attack(model, images, labels, eps, alpha, iters):
     original_images = images.clone().detach()
     images = images.clone().detach().to(device)
     labels = labels.clone().detach().to(device)
