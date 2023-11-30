@@ -45,7 +45,7 @@ def test_natural(net, test_loader, num_samples):
 
     return 100 * correct / total
 
-def test_adversarial(net, test_loader, num_samples, eps=0.1, alpha=0.01, iters=40):
+def test_adversarial(net, test_loader, num_samples, eps=0.2, alpha=0.01, iters=40):
     correct = 0
     total = 0
     """

@@ -98,20 +98,20 @@ def train_model(net, train_loader, pth_filename, num_epochs):
     net.save(pth_filename)
     print('Model saved in {}'.format(pth_filename))
     
-def train_model_adversarial(net, train_loader, pth_filename, num_epochs, eps=0.1, alpha=0.01, iters=40):
+def update_eps_alpha(epoch, num_epochs, eps, final_eps, alpha, final_alpha):
+    scale = epoch / num_epochs
+    new_epsilon = (final_eps - eps) * scale + eps
+    new_alpha = (final_alpha - alpha) * scale + alpha
+        
+    return new_epsilon, new_alpha
+    
+def train_model_adversarial(net, train_loader, pth_filename, num_epochs, eps=0.05, alpha=0.01, iters=40):
     print("Starting training with adversarial examples")
     criterion = nn.NLLLoss()
     optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
     
-    final_eps = 0.3
+    final_eps = 0.5
     final_alpha = 0.03
-    
-    def update_eps_alpha(epoch, num_epochs, eps, final_eps, alpha, final_alpha):
-        scale = epoch / num_epochs
-        new_epsilon = (final_eps - eps) * scale + eps
-        new_alpha = (final_alpha - alpha) * scale + alpha
-        
-        return new_epsilon, new_alpha
 
     for epoch in tqdm(range(num_epochs)):  
         
