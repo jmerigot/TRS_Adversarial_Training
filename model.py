@@ -9,6 +9,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 import torch.utils.data
 import torchvision.transforms as transforms
+from tqdm import tqdm
 
 
 
@@ -21,7 +22,7 @@ batch_size = 16
 '''Basic neural network architecture (from pytorch doc).'''
 class Net(nn.Module):
 
-    model_file="models/default_model.pth"
+    model_file="models/adv_model.pth"
     '''This file will be loaded to test your model. Use --model-file to load/store a different model.'''
 
     def __init__(self):
@@ -96,6 +97,67 @@ def train_model(net, train_loader, pth_filename, num_epochs):
 
     net.save(pth_filename)
     print('Model saved in {}'.format(pth_filename))
+    
+def update_eps_alpha(epoch, num_epochs, eps, final_eps, alpha, final_alpha):
+    scale = epoch / num_epochs
+    new_epsilon = (final_eps - eps) * scale + eps
+    new_alpha = (final_alpha - alpha) * scale + alpha
+        
+    return new_epsilon, new_alpha
+    
+def train_model_adversarial(net, train_loader, pth_filename, num_epochs, eps=0.05, alpha=0.01, iters=40):
+    print("Starting training with adversarial examples")
+    criterion = nn.NLLLoss()
+    optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
+    
+    final_eps = 0.2
+    final_alpha = 0.03
+
+    for epoch in tqdm(range(num_epochs)):  
+        
+        eps, alpha = update_eps_alpha(epoch, num_epochs, eps, final_eps, alpha, final_alpha)
+        
+        running_loss = 0.0
+        for i, data in tqdm(enumerate(train_loader, 0)):
+            inputs, labels = data[0].to(device), data[1].to(device)
+
+            # Generate adversarial examples
+            adv_inputs = pgd_attack(net, inputs, labels, eps, alpha, iters)
+
+            # Train on both natural and adversarial examples
+            for input_set in [inputs, adv_inputs]:
+                optimizer.zero_grad()
+                outputs = net(input_set)
+                loss = criterion(outputs, labels)
+                loss.backward()
+                optimizer.step()
+
+            # print statistics
+            running_loss += loss.item()
+            if i % 500 == 499:
+                print('[%d, %5d] loss: %.3f' % (epoch + 1, i + 1, running_loss / 1000))
+                running_loss = 0.0
+
+    net.save(pth_filename)
+    print('Finished Adversarial Training')
+
+    
+def pgd_attack(model, images, labels, eps=0.1, alpha=0.01, iters=40):
+    original_images = images.clone().detach()
+    images = images.clone().detach().to(device)
+    labels = labels.clone().detach().to(device)
+    
+    for _ in range(iters):
+        images.requires_grad = True
+        outputs = model(images)
+        model.zero_grad()
+        loss = F.nll_loss(outputs, labels)
+        loss.backward()
+        adv_images = images + alpha * images.grad.sign()
+        eta = torch.clamp(adv_images - original_images, min=-eps, max=eps)
+        images = torch.clamp(original_images + eta, min=0, max=1).detach_()
+        
+    return images
 
 def test_natural(net, test_loader):
     '''Basic testing function.'''
@@ -104,7 +166,7 @@ def test_natural(net, test_loader):
     total = 0
     # since we're not training, we don't need to calculate the gradients for our outputs
     with torch.no_grad():
-        for i,data in enumerate(test_loader, 0):
+        for i, data in enumerate(test_loader, 0):
             images, labels = data[0].to(device), data[1].to(device)
             # calculate outputs by running images through the network
             outputs = net(images)
@@ -162,7 +224,8 @@ def main():
         train_transform = transforms.Compose([transforms.ToTensor()]) 
         cifar = torchvision.datasets.CIFAR10('./data/', download=True, transform=train_transform)
         train_loader = get_train_loader(cifar, valid_size, batch_size=batch_size)
-        train_model(net, train_loader, args.model_file, args.num_epochs)
+        #train_model(net, train_loader, args.model_file, args.num_epochs)
+        train_model_adversarial(net, train_loader, args.model_file, args.num_epochs)
         print("Model save to '{}'.".format(args.model_file))
 
     #### Model testing
@@ -177,7 +240,7 @@ def main():
     net.load(args.model_file)
 
     acc = test_natural(net, valid_loader)
-    print("Model natural accuracy (valid): {}".format(acc))
+    print("Model natural accuracy (valid): {} %".format(acc))
 
     if args.model_file != Net.model_file:
         print("Warning: '{0}' is not the default model file, "\
