@@ -142,7 +142,7 @@ def train_model_adversarial(net, train_loader, pth_filename, num_epochs,
 
     for epoch in tqdm(range(num_epochs)):  
         
-        eps, alpha = update_eps_alpha(epoch, num_epochs, eps, final_eps, alpha, final_alpha)
+        #eps, alpha = update_eps_alpha(epoch, num_epochs, eps, final_eps, alpha, final_alpha)
         
         running_loss = 0.0
         for i, data in tqdm(enumerate(train_loader, 0)):
