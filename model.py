@@ -25,6 +25,30 @@ class Net(nn.Module):
     model_file = "models/adv_model.pth"
     '''This file will be loaded to test your model. Use --model-file to load/store a different model.'''
 
+    def __init__(self, dropout_rate=0.3):
+        super().__init__()
+        self.conv1 = nn.Conv2d(3, 6, 5)
+        self.pool = nn.MaxPool2d(2, 2)
+        self.conv2 = nn.Conv2d(6, 16, 5)
+        self.fc1 = nn.Linear(16 * 5 * 5, 120)
+        self.dropout1 = nn.Dropout(dropout_rate)
+        self.fc2 = nn.Linear(120, 84)
+        self.dropout2 = nn.Dropout(dropout_rate)
+        self.fc3 = nn.Linear(84, 10)
+        
+    def forward(self, x):
+        x = self.pool(F.relu(self.conv1(x)))
+        x = self.pool(F.relu(self.conv2(x)))
+        x = torch.flatten(x, 1)
+        x = F.relu(self.fc1(x))
+        x = self.dropout1(x)
+        x = F.relu(self.fc2(x))
+        x = self.dropout2(x)
+        x = self.fc3(x)
+        x = F.log_softmax(x, dim=1)
+        return x
+
+    """
     def __init__(self):
         super().__init__()
         self.conv1 = nn.Conv2d(3, 6, 5)
@@ -43,6 +67,7 @@ class Net(nn.Module):
         x = self.fc3(x)
         x = F.log_softmax(x, dim=1)
         return x
+    """
 
     def save(self, model_file):
         '''Helper function, use it to save the model weights after training.'''
@@ -109,7 +134,7 @@ def train_model_adversarial(net, train_loader, pth_filename, num_epochs,
                             eps=0.03, alpha=0.01, iters=40, step_size=1, gamma=0.75, adv_prob = 0.3):
     print("Starting training with adversarial examples")
     criterion = nn.NLLLoss()
-    optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
+    optimizer = optim.SGD(net.parameters(), lr=0.05, momentum=0.9)
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
     
     final_eps = 0.08
@@ -152,8 +177,8 @@ def train_model_adversarial(net, train_loader, pth_filename, num_epochs,
 
             # print statistics
             running_loss += loss.item()
-            if i % 500 == 499:      # print every 2000 mini-batches
-                print('[%d, %5d] loss: %.3f' % 
+            if i % 500 == 499:    # print every 2000 mini-batches
+                print('[%d, %5d] loss: %.3f' %
                       (epoch + 1, i + 1, running_loss / 2000))
                 running_loss = 0.0
                 
@@ -236,7 +261,6 @@ def main():
     #### Create model and move it to whatever device is available (gpu/cpu)
     net = Net()
     net.to(device)
-    print(net.model_file)
 
     #### Model training (if necessary)
     if not os.path.exists(args.model_file) or args.force_train:
