@@ -10,7 +10,7 @@ import torch.optim as optim
 import torch.utils.data
 import torchvision.transforms as transforms
 from tqdm import tqdm
-
+import random
 
 
 use_cuda = torch.cuda.is_available()
@@ -22,9 +22,33 @@ batch_size = 16
 '''Basic neural network architecture (from pytorch doc).'''
 class Net(nn.Module):
 
-    model_file="models/adv_model.pth"
+    model_file = "models/adv_model.pth"
     '''This file will be loaded to test your model. Use --model-file to load/store a different model.'''
 
+    def __init__(self, dropout_rate=0.3):
+        super().__init__()
+        self.conv1 = nn.Conv2d(3, 6, 5)
+        self.pool = nn.MaxPool2d(2, 2)
+        self.conv2 = nn.Conv2d(6, 16, 5)
+        self.fc1 = nn.Linear(16 * 5 * 5, 120)
+        self.dropout1 = nn.Dropout(dropout_rate)
+        self.fc2 = nn.Linear(120, 84)
+        self.dropout2 = nn.Dropout(dropout_rate)
+        self.fc3 = nn.Linear(84, 10)
+        
+    def forward(self, x):
+        x = self.pool(F.relu(self.conv1(x)))
+        x = self.pool(F.relu(self.conv2(x)))
+        x = torch.flatten(x, 1)
+        x = F.relu(self.fc1(x))
+        x = self.dropout1(x)
+        x = F.relu(self.fc2(x))
+        x = self.dropout2(x)
+        x = self.fc3(x)
+        x = F.log_softmax(x, dim=1)
+        return x
+
+    """
     def __init__(self):
         super().__init__()
         self.conv1 = nn.Conv2d(3, 6, 5)
@@ -43,6 +67,7 @@ class Net(nn.Module):
         x = self.fc3(x)
         x = F.log_softmax(x, dim=1)
         return x
+    """
 
     def save(self, model_file):
         '''Helper function, use it to save the model weights after training.'''
@@ -99,18 +124,20 @@ def train_model(net, train_loader, pth_filename, num_epochs):
     print('Model saved in {}'.format(pth_filename))
     
 def update_eps_alpha(epoch, num_epochs, eps, final_eps, alpha, final_alpha):
-    scale = epoch / num_epochs
+    scale = epoch / (2 * num_epochs)
     new_epsilon = (final_eps - eps) * scale + eps
     new_alpha = (final_alpha - alpha) * scale + alpha
         
     return new_epsilon, new_alpha
     
-def train_model_adversarial(net, train_loader, pth_filename, num_epochs, eps=0.05, alpha=0.01, iters=40):
+def train_model_adversarial(net, train_loader, pth_filename, num_epochs, 
+                            eps=0.03, alpha=0.01, iters=40, step_size=1, gamma=0.75, adv_prob = 0.3):
     print("Starting training with adversarial examples")
     criterion = nn.NLLLoss()
-    optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
+    optimizer = optim.SGD(net.parameters(), lr=0.01, momentum=0.9)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
     
-    final_eps = 0.2
+    final_eps = 0.08
     final_alpha = 0.03
 
     for epoch in tqdm(range(num_epochs)):  
@@ -120,10 +147,25 @@ def train_model_adversarial(net, train_loader, pth_filename, num_epochs, eps=0.0
         running_loss = 0.0
         for i, data in tqdm(enumerate(train_loader, 0)):
             inputs, labels = data[0].to(device), data[1].to(device)
+            
+            # Decide whether to use adversarial examples or not
+            if random.random() < adv_prob:
+                # Generate adversarial examples
+                input_set = pgd_attack(net, inputs, labels, eps, alpha, iters)
+            else:
+                input_set = inputs
 
+            # Train on the chosen set (adversarial or natural)
+            optimizer.zero_grad()
+            outputs = net(input_set)
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
+
+            """
             # Generate adversarial examples
-            adv_inputs = pgd_attack(net, inputs, labels, eps, alpha, iters)
-
+            #adv_inputs = pgd_attack(net, inputs, labels, eps, alpha, iters)
+            
             # Train on both natural and adversarial examples
             for input_set in [inputs, adv_inputs]:
                 optimizer.zero_grad()
@@ -131,18 +173,22 @@ def train_model_adversarial(net, train_loader, pth_filename, num_epochs, eps=0.0
                 loss = criterion(outputs, labels)
                 loss.backward()
                 optimizer.step()
+            """
 
             # print statistics
             running_loss += loss.item()
-            if i % 500 == 499:
-                print('[%d, %5d] loss: %.3f' % (epoch + 1, i + 1, running_loss / 1000))
+            if i % 500 == 499:    # print every 2000 mini-batches
+                print('[%d, %5d] loss: %.3f' %
+                      (epoch + 1, i + 1, running_loss / 2000))
                 running_loss = 0.0
+                
+        scheduler.step()
 
     net.save(pth_filename)
     print('Finished Adversarial Training')
 
     
-def pgd_attack(model, images, labels, eps=0.1, alpha=0.01, iters=40):
+def pgd_attack(model, images, labels, eps, alpha, iters):
     original_images = images.clone().detach()
     images = images.clone().detach().to(device)
     labels = labels.clone().detach().to(device)
@@ -208,7 +254,7 @@ def main():
     parser.add_argument('-f', '--force-train', action="store_true",
                         help="Force training even if model file already exists"\
                              "Warning: previous model file will be erased!).")
-    parser.add_argument('-e', '--num-epochs', type=int, default=10,
+    parser.add_argument('-e', '--num-epochs', type=int, default=5,
                         help="Set the number of epochs during training")
     args = parser.parse_args()
 
