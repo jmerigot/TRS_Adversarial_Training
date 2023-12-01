@@ -108,7 +108,7 @@ def update_eps_alpha(epoch, num_epochs, eps, final_eps, alpha):
 def train_model_adversarial(net, train_loader, pth_filename, num_epochs, eps=0.03, alpha=0.01, iters=40, step_size=1, gamma=0.75):
     print("Starting training with adversarial examples")
     criterion = nn.NLLLoss()
-    optimizer = optim.SGD(net.parameters(), lr=0.05, momentum=0.9)
+    optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
     
     final_eps = 0.08
