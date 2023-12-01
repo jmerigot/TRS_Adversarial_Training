@@ -124,7 +124,7 @@ def train_model(net, train_loader, pth_filename, num_epochs):
     print('Model saved in {}'.format(pth_filename))
     
 def update_eps_alpha(epoch, num_epochs, eps, final_eps, alpha, final_alpha):
-    scale = epoch / num_epochs
+    scale = epoch / (2 * num_epochs)
     new_epsilon = (final_eps - eps) * scale + eps
     new_alpha = (final_alpha - alpha) * scale + alpha
         
@@ -254,7 +254,7 @@ def main():
     parser.add_argument('-f', '--force-train', action="store_true",
                         help="Force training even if model file already exists"\
                              "Warning: previous model file will be erased!).")
-    parser.add_argument('-e', '--num-epochs', type=int, default=10,
+    parser.add_argument('-e', '--num-epochs', type=int, default=5,
                         help="Set the number of epochs during training")
     args = parser.parse_args()
 
