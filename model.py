@@ -22,7 +22,7 @@ batch_size = 16
 '''Basic neural network architecture (from pytorch doc).'''
 class Net(nn.Module):
 
-    model_file="models/adv_model.pth"
+    model_file = "models/adv_model.pth"
     '''This file will be loaded to test your model. Use --model-file to load/store a different model.'''
 
     def __init__(self):
@@ -108,7 +108,7 @@ def update_eps_alpha(epoch, num_epochs, eps, final_eps, alpha):
 def train_model_adversarial(net, train_loader, pth_filename, num_epochs, eps=0.03, alpha=0.01, iters=40, step_size=1, gamma=0.5):
     print("Starting training with adversarial examples")
     criterion = nn.NLLLoss()
-    optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
+    optimizer = optim.SGD(net.parameters(), lr=0.0001, momentum=0.9)
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
     
     final_eps = 0.1
@@ -211,13 +211,14 @@ def main():
     parser.add_argument('-f', '--force-train', action="store_true",
                         help="Force training even if model file already exists"\
                              "Warning: previous model file will be erased!).")
-    parser.add_argument('-e', '--num-epochs', type=int, default=10,
+    parser.add_argument('-e', '--num-epochs', type=int, default=5,
                         help="Set the number of epochs during training")
     args = parser.parse_args()
 
     #### Create model and move it to whatever device is available (gpu/cpu)
     net = Net()
     net.to(device)
+    print(net.model_file)
 
     #### Model training (if necessary)
     if not os.path.exists(args.model_file) or args.force_train:
