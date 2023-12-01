@@ -10,7 +10,7 @@ import torch.optim as optim
 import torch.utils.data
 import torchvision.transforms as transforms
 from tqdm import tqdm
-
+import random
 
 
 use_cuda = torch.cuda.is_available()
@@ -98,33 +98,49 @@ def train_model(net, train_loader, pth_filename, num_epochs):
     net.save(pth_filename)
     print('Model saved in {}'.format(pth_filename))
     
-def update_eps_alpha(epoch, num_epochs, eps, final_eps, alpha):
+def update_eps_alpha(epoch, num_epochs, eps, final_eps, alpha, final_alpha):
     scale = epoch / num_epochs
     new_epsilon = (final_eps - eps) * scale + eps
-    #new_alpha = (final_alpha - alpha) * scale + alpha
+    new_alpha = (final_alpha - alpha) * scale + alpha
         
-    return new_epsilon
+    return new_epsilon, new_alpha
     
-def train_model_adversarial(net, train_loader, pth_filename, num_epochs, eps=0.03, alpha=0.01, iters=40, step_size=1, gamma=0.75):
+def train_model_adversarial(net, train_loader, pth_filename, num_epochs, 
+                            eps=0.03, alpha=0.01, iters=40, step_size=1, gamma=0.75, adv_prob = 0.3):
     print("Starting training with adversarial examples")
     criterion = nn.NLLLoss()
     optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
     
     final_eps = 0.08
-    #final_alpha = 0.03
+    final_alpha = 0.03
 
     for epoch in tqdm(range(num_epochs)):  
         
-        eps = update_eps_alpha(epoch, num_epochs, eps, final_eps, alpha)
+        eps, alpha = update_eps_alpha(epoch, num_epochs, eps, final_eps, alpha, final_alpha)
         
         running_loss = 0.0
         for i, data in tqdm(enumerate(train_loader, 0)):
             inputs, labels = data[0].to(device), data[1].to(device)
+            
+            # Decide whether to use adversarial examples or not
+            if random.random() < adv_prob:
+                # Generate adversarial examples
+                input_set = pgd_attack(net, inputs, labels, eps, alpha, iters)
+            else:
+                input_set = inputs
 
+            # Train on the chosen set (adversarial or natural)
+            optimizer.zero_grad()
+            outputs = net(input_set)
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
+
+            """
             # Generate adversarial examples
-            adv_inputs = pgd_attack(net, inputs, labels, eps, alpha, iters)
-
+            #adv_inputs = pgd_attack(net, inputs, labels, eps, alpha, iters)
+            
             # Train on both natural and adversarial examples
             for input_set in [inputs, adv_inputs]:
                 optimizer.zero_grad()
@@ -132,6 +148,7 @@ def train_model_adversarial(net, train_loader, pth_filename, num_epochs, eps=0.0
                 loss = criterion(outputs, labels)
                 loss.backward()
                 optimizer.step()
+            """
 
             # print statistics
             running_loss += loss.item()
