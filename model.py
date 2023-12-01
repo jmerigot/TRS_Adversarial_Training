@@ -254,7 +254,7 @@ def main():
     parser.add_argument('-f', '--force-train', action="store_true",
                         help="Force training even if model file already exists"\
                              "Warning: previous model file will be erased!).")
-    parser.add_argument('-e', '--num-epochs', type=int, default=5,
+    parser.add_argument('-e', '--num-epochs', type=int, default=10,
                         help="Set the number of epochs during training")
     args = parser.parse_args()
 
