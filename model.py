@@ -136,9 +136,9 @@ def train_model_adversarial(net, train_loader, pth_filename, num_epochs,
     criterion = nn.NLLLoss()
     optimizer = optim.SGD(net.parameters(), lr=0.01, momentum=0.9)
     #scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
-    scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.5)
+    #scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.5)
     
-    def adjust_learning_rate(optimizer, epoch, init_lr=0.01, decay_rate=0.1, step_size=5):
+    def adjust_learning_rate(optimizer, epoch, init_lr=0.01, decay_rate=0.1, step_size=1):
         """Sets the learning rate to the initial LR decayed every 5 epochs"""
         lr = init_lr * (decay_rate ** (epoch // step_size))
         for param_group in optimizer.param_groups:
@@ -149,7 +149,7 @@ def train_model_adversarial(net, train_loader, pth_filename, num_epochs,
 
     for epoch in tqdm(range(num_epochs)): 
         
-        #adjust_learning_rate(optimizer, epoch) 
+        adjust_learning_rate(optimizer, epoch) 
         
         eps, alpha = update_eps_alpha(epoch, num_epochs, eps, final_eps, alpha, final_alpha)
         
@@ -191,7 +191,7 @@ def train_model_adversarial(net, train_loader, pth_filename, num_epochs,
                       (epoch + 1, i + 1, running_loss / 2000))
                 running_loss = 0.0
                 
-        scheduler.step()
+        #scheduler.step()
 
     net.save(pth_filename)
     print('Finished Adversarial Training')
