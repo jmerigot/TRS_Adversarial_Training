@@ -48,27 +48,6 @@ class Net(nn.Module):
         x = F.log_softmax(x, dim=1)
         return x
 
-    """
-    def __init__(self):
-        super().__init__()
-        self.conv1 = nn.Conv2d(3, 6, 5)
-        self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = nn.Conv2d(6, 16, 5)
-        self.fc1 = nn.Linear(16 * 5 * 5, 120)
-        self.fc2 = nn.Linear(120, 84)
-        self.fc3 = nn.Linear(84, 10)
-        
-    def forward(self, x):
-        x = self.pool(F.relu(self.conv1(x)))
-        x = self.pool(F.relu(self.conv2(x)))
-        x = torch.flatten(x, 1)
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
-        x = F.log_softmax(x, dim=1)
-        return x
-    """
-
     def save(self, model_file):
         '''Helper function, use it to save the model weights after training.'''
         torch.save(self.state_dict(), model_file)
@@ -135,8 +114,8 @@ def train_model_adversarial(net, train_loader, pth_filename, num_epochs,
     print("Starting training with adversarial examples")
     criterion = nn.NLLLoss()
     optimizer = optim.SGD(net.parameters(), lr=0.01, momentum=0.9)
-    #scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
-    #scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.5)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
+    #scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=gamma)
     
     def adjust_learning_rate(optimizer, epoch, init_lr=0.01, decay_rate=0.1, step_size=1):
         """Sets the learning rate to the initial LR decayed every 5 epochs"""
@@ -149,7 +128,7 @@ def train_model_adversarial(net, train_loader, pth_filename, num_epochs,
 
     for epoch in tqdm(range(num_epochs)): 
         
-        adjust_learning_rate(optimizer, epoch) 
+        #adjust_learning_rate(optimizer, epoch) 
         
         eps, alpha = update_eps_alpha(epoch, num_epochs, eps, final_eps, alpha, final_alpha)
         
@@ -160,7 +139,8 @@ def train_model_adversarial(net, train_loader, pth_filename, num_epochs,
             # Decide whether to use adversarial examples or not
             if random.random() < adv_prob:
                 # Generate adversarial examples
-                input_set = pgd_attack(net, inputs, labels, eps, alpha, iters)
+                #input_set = pgd_attack(net, inputs, labels, eps, alpha, iters)
+                input_set = pgd_attack_l2(net, inputs, labels, eps, alpha, iters)
             else:
                 input_set = inputs
 
@@ -171,19 +151,6 @@ def train_model_adversarial(net, train_loader, pth_filename, num_epochs,
             loss.backward()
             optimizer.step()
 
-            """
-            # Generate adversarial examples
-            #adv_inputs = pgd_attack(net, inputs, labels, eps, alpha, iters)
-            
-            # Train on both natural and adversarial examples
-            for input_set in [inputs, adv_inputs]:
-                optimizer.zero_grad()
-                outputs = net(input_set)
-                loss = criterion(outputs, labels)
-                loss.backward()
-                optimizer.step()
-            """
-
             # print statistics
             running_loss += loss.item()
             if i % 500 == 499:    # print every 2000 mini-batches
@@ -191,7 +158,7 @@ def train_model_adversarial(net, train_loader, pth_filename, num_epochs,
                       (epoch + 1, i + 1, running_loss / 2000))
                 running_loss = 0.0
                 
-        #scheduler.step()
+        scheduler.step()
 
     net.save(pth_filename)
     print('Finished Adversarial Training')
@@ -213,6 +180,36 @@ def pgd_attack(model, images, labels, eps, alpha, iters):
         images = torch.clamp(original_images + eta, min=0, max=1).detach_()
         
     return images
+
+def pgd_attack_l2(model, images, labels, eps, alpha, iters):
+    original_images = images.clone().detach().to(device)
+    images = images.clone().detach().to(device)
+    labels = labels.clone().detach().to(device)
+
+    for _ in range(iters):
+        images.requires_grad = True
+        outputs = model(images)
+        model.zero_grad()
+        loss = F.nll_loss(outputs, labels)
+        loss.backward()
+        grad = images.grad.data
+
+        # L2 norm
+        normed_grad = grad / grad.view(grad.shape[0], -1).norm(2, dim=1).view(-1, 1, 1, 1)
+
+        adv_images = images + alpha * normed_grad
+        delta = torch.clamp(adv_images - original_images, min=-eps, max=eps)
+        
+        # Project back into L2 ball
+        mask = delta.view(delta.shape[0], -1).norm(2, dim=1) <= eps
+        scaling_factor = delta.view(delta.shape[0], -1).norm(2, dim=1)
+        scaling_factor[mask] = eps
+        delta *= eps / scaling_factor.view(-1, 1, 1, 1)
+
+        images = torch.clamp(original_images + delta, min=0, max=1).detach_()
+        
+    return images
+
 
 def test_natural(net, test_loader):
     '''Basic testing function.'''
