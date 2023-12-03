@@ -136,7 +136,7 @@ def train_model_adversarial(net, train_loader, pth_filename, num_epochs,
     criterion = nn.NLLLoss()
     optimizer = optim.SGD(net.parameters(), lr=0.01, momentum=0.9)
     #scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
-    scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.5)
+    scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.75)
     
     final_eps = 0.08
     final_alpha = 0.03
