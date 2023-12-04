@@ -139,8 +139,8 @@ def train_model_adversarial(net, train_loader, pth_filename, num_epochs,
             # Decide whether to use adversarial examples or not
             if random.random() < adv_prob:
                 # Generate adversarial examples
-                input_set = pgd_attack(net, inputs, labels, eps, alpha, iters)
-                #input_set = pgd_attack_l2(net, inputs, labels, eps, alpha, iters)
+                #input_set = pgd_attack(net, inputs, labels, eps, alpha, iters)
+                input_set = pgd_attack_l2(net, inputs, labels, eps, alpha, iters)
             else:
                 input_set = inputs
 
