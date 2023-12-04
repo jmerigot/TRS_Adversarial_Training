@@ -113,7 +113,7 @@ def train_model_adversarial(net, train_loader, pth_filename, num_epochs,
                             eps=0.03, alpha=0.01, iters=40, step_size=1, gamma=0.5, adv_prob = 0.2):
     print("Starting training with adversarial examples")
     criterion = nn.NLLLoss()
-    optimizer = optim.SGD(net.parameters(), lr=0.01, momentum=0.9)
+    optimizer = optim.Adam(net.parameters(), lr=0.001)
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
     #scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=gamma)
     
@@ -146,7 +146,7 @@ def train_model_adversarial(net, train_loader, pth_filename, num_epochs,
 
             # Train on the chosen set (adversarial or natural)
             optimizer.zero_grad()
-            input_set.requires_grad = True
+            #input_set.requires_grad = True
             #print('gradients = ', input_set.requires_grad)
             outputs = net(input_set)
             loss = criterion(outputs, labels)
