@@ -110,7 +110,7 @@ def update_eps_alpha(epoch, num_epochs, eps, final_eps, alpha, final_alpha):
     return new_epsilon, new_alpha
     
 def train_model_adversarial(net, train_loader, pth_filename, num_epochs, 
-                            eps=0.03, alpha=0.01, iters=50, step_size=1, gamma=0.2, adv_prob = 0.4):
+                            eps=0.03, alpha=0.01, iters=50, step_size=2, gamma=0.8, adv_prob = 0.3):
     print("Starting training with adversarial examples")
     criterion = nn.NLLLoss()
     optimizer = optim.Adam(net.parameters(), lr=0.001)
