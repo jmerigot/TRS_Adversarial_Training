@@ -184,9 +184,41 @@ def pgd_attack(model, images, labels, eps, alpha, iters):
     return images
 
 def pgd_attack_l2(model, images, labels, eps, alpha, iters):
+    original_images = images.clone().detach().to(device)  # Only clone images once
+
+    for _ in range(iters):
+        images.requires_grad = True
+        outputs = model(images)
+        loss = F.nll_loss(outputs, labels.to(device))  # Move labels to device without cloning
+        model.zero_grad()
+        loss.backward()
+        grad = images.grad.data
+
+        # L2 norm
+        norm = grad.view(grad.shape[0], -1).norm(p=2, dim=1).view(-1, 1, 1, 1) + 1e-8  # Add small constant to avoid division by zero
+        normed_grad = grad / norm
+
+        adv_images = images + alpha * normed_grad
+        delta = adv_images - original_images
+        delta = torch.clamp(delta, min=-eps, max=eps)
+
+        # Project back into L2 ball
+        mask = delta.view(delta.shape[0], -1).norm(p=2, dim=1) <= eps
+        scaling_factor = delta.view(delta.shape[0], -1).norm(p=2, dim=1)
+        scaling_factor[mask] = eps
+        delta = delta * (eps / scaling_factor.view(-1, 1, 1, 1))
+
+        images = original_images + delta
+        images = torch.clamp(images, min=0, max=1).detach_()  # In-place clamp and detach
+
+    return images
+
+
+"""
+def pgd_attack_l2(model, images, labels, eps, alpha, iters):
     original_images = images.clone().detach()#.to(device)
     images = images.clone().detach().to(device)
-    #labels = labels.clone().detach().to(device)
+    labels = labels.clone().detach().to(device)
 
     for _ in range(iters):
         images.requires_grad = True
@@ -211,7 +243,7 @@ def pgd_attack_l2(model, images, labels, eps, alpha, iters):
         images = torch.clamp(original_images + delta, min=0, max=1).detach_()
         
     return images
-
+"""
 
 def test_natural(net, test_loader):
     '''Basic testing function.'''
