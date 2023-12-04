@@ -184,10 +184,9 @@ def pgd_attack(model, images, labels, eps, alpha, iters):
     return images
 
 def pgd_attack_l2(model, images, labels, eps, alpha, iters):
-    print(device)
     original_images = images.clone().detach()#.to(device)
     images = images.clone().detach().to(device)
-    labels = labels.clone().detach().to(device)
+    #labels = labels.clone().detach().to(device)
 
     for _ in range(iters):
         images.requires_grad = True
