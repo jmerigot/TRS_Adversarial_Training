@@ -110,7 +110,7 @@ def update_eps_alpha(epoch, num_epochs, eps, final_eps, alpha, final_alpha):
     return new_epsilon, new_alpha
     
 def train_model_adversarial(net, train_loader, pth_filename, num_epochs, 
-                            eps=0.02, alpha=0.01, iters=40, step_size=1, gamma=0.6, adv_prob = 0.25):
+                            eps=0.03, alpha=0.01, iters=40, step_size=1, gamma=0.65, adv_prob = 0.3):
     print("Starting training with adversarial examples")
     criterion = nn.NLLLoss()
     optimizer = optim.Adam(net.parameters(), lr=0.001)
@@ -213,37 +213,6 @@ def pgd_attack_l2(model, images, labels, eps, alpha, iters):
 
     return images
 
-
-"""
-def pgd_attack_l2(model, images, labels, eps, alpha, iters):
-    original_images = images.clone().detach()#.to(device)
-    images = images.clone().detach().to(device)
-    labels = labels.clone().detach().to(device)
-
-    for _ in range(iters):
-        images.requires_grad = True
-        outputs = model(images)
-        model.zero_grad()
-        loss = F.nll_loss(outputs, labels)
-        loss.backward()
-        grad = images.grad.data
-
-        # L2 norm
-        normed_grad = grad / grad.view(grad.shape[0], -1).norm(2, dim=1).view(-1, 1, 1, 1)
-
-        adv_images = images + alpha * normed_grad
-        delta = torch.clamp(adv_images - original_images, min=-eps, max=eps)
-        
-        # Project back into L2 ball
-        mask = delta.view(delta.shape[0], -1).norm(2, dim=1) <= eps
-        scaling_factor = delta.view(delta.shape[0], -1).norm(2, dim=1)
-        scaling_factor[mask] = eps
-        delta *= eps / scaling_factor.view(-1, 1, 1, 1)
-
-        images = torch.clamp(original_images + delta, min=0, max=1).detach_()
-        
-    return images
-"""
 
 def test_natural(net, test_loader):
     '''Basic testing function.'''
