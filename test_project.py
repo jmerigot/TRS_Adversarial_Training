@@ -8,7 +8,7 @@ import torch, torchvision
 import torchvision.transforms as transforms
 from tqdm import tqdm
 
-from model import pgd_attack
+from model import pgd_attack, pgd_attack_l2
 
 torch.seed()
 use_cuda = torch.cuda.is_available()
@@ -61,6 +61,7 @@ def test_adversarial(net, test_loader, num_samples, eps=0.03, alpha=0.01, iters=
     for i, data in enumerate(test_loader, 0):
         images, labels = data[0].to(device), data[1].to(device)
         adv_images = pgd_attack(net, images, labels, eps, alpha, iters)
+        #adv_images = pgd_attack_l2(net, images, labels, eps, alpha, iters)
         total = 0
         correct = 0
         for _ in range(num_samples):
