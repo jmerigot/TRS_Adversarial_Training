@@ -22,7 +22,7 @@ batch_size = 16
 '''Basic neural network architecture (from pytorch doc).'''
 class Net(nn.Module):
 
-    model_file = "models/adv_model.pth"
+    model_file = "models/pgd_l2_model.pth"
     '''This file will be loaded to test your model. Use --model-file to load/store a different model.'''
 
     def __init__(self, dropout_rate=0.3):
@@ -110,10 +110,10 @@ def update_eps_alpha(epoch, num_epochs, eps, final_eps, alpha, final_alpha):
     return new_epsilon, new_alpha
     
 def train_model_adversarial(net, train_loader, pth_filename, num_epochs, 
-                            eps=0.03, alpha=0.001, iters=40, step_size=1, gamma=1, adv_prob = 0.2):
+                            eps=0.03, alpha=0.01, iters=40, step_size=1, gamma=0.65, adv_prob = 0.3):
     print("Starting training with adversarial examples")
     criterion = nn.NLLLoss()
-    optimizer = optim.SGD(net.parameters(), lr=0.01, momentum=0.9)
+    optimizer = optim.Adam(net.parameters(), lr=0.001)
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
     #scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=gamma)
     
@@ -123,7 +123,7 @@ def train_model_adversarial(net, train_loader, pth_filename, num_epochs,
         for param_group in optimizer.param_groups:
             param_group['lr'] = lr
     
-    final_eps = 0.08
+    final_eps = 0.05
     final_alpha = 0.03
 
     for epoch in tqdm(range(num_epochs)): 
@@ -146,7 +146,7 @@ def train_model_adversarial(net, train_loader, pth_filename, num_epochs,
 
             # Train on the chosen set (adversarial or natural)
             optimizer.zero_grad()
-            input_set.requires_grad = True
+            #input_set.requires_grad = True
             #print('gradients = ', input_set.requires_grad)
             outputs = net(input_set)
             loss = criterion(outputs, labels)
@@ -184,32 +184,33 @@ def pgd_attack(model, images, labels, eps, alpha, iters):
     return images
 
 def pgd_attack_l2(model, images, labels, eps, alpha, iters):
-    original_images = images.clone().detach().to(device)
-    images = images.clone().detach().to(device)
-    labels = labels.clone().detach().to(device)
+    original_images = images.clone().detach().to(device)  # Only clone images once
 
     for _ in range(iters):
         images.requires_grad = True
         outputs = model(images)
+        loss = F.nll_loss(outputs, labels.to(device))  # Move labels to device without cloning
         model.zero_grad()
-        loss = F.nll_loss(outputs, labels)
         loss.backward()
         grad = images.grad.data
 
         # L2 norm
-        normed_grad = grad / grad.view(grad.shape[0], -1).norm(2, dim=1).view(-1, 1, 1, 1)
+        norm = grad.view(grad.shape[0], -1).norm(p=2, dim=1).view(-1, 1, 1, 1) + 1e-8  # Add small constant to avoid division by zero
+        normed_grad = grad / norm
 
         adv_images = images + alpha * normed_grad
-        delta = torch.clamp(adv_images - original_images, min=-eps, max=eps)
-        
-        # Project back into L2 ball
-        mask = delta.view(delta.shape[0], -1).norm(2, dim=1) <= eps
-        scaling_factor = delta.view(delta.shape[0], -1).norm(2, dim=1)
-        scaling_factor[mask] = eps
-        delta *= eps / scaling_factor.view(-1, 1, 1, 1)
+        delta = adv_images - original_images
+        delta = torch.clamp(delta, min=-eps, max=eps)
 
-        images = torch.clamp(original_images + delta, min=0, max=1).detach_()
-        
+        # Project back into L2 ball
+        mask = delta.view(delta.shape[0], -1).norm(p=2, dim=1) <= eps
+        scaling_factor = delta.view(delta.shape[0], -1).norm(p=2, dim=1)
+        scaling_factor[mask] = eps
+        delta = delta * (eps / scaling_factor.view(-1, 1, 1, 1))
+
+        images = original_images + delta
+        images = torch.clamp(images, min=0, max=1).detach_()  # In-place clamp and detach
+
     return images
 
 
