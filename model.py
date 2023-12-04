@@ -110,7 +110,7 @@ def update_eps_alpha(epoch, num_epochs, eps, final_eps, alpha, final_alpha):
     return new_epsilon, new_alpha
     
 def train_model_adversarial(net, train_loader, pth_filename, num_epochs, 
-                            eps=0.03, alpha=0.001, iters=40, step_size=1, gamma=1, adv_prob = 0.2):
+                            eps=0.03, alpha=0.01, iters=40, step_size=1, gamma=0.5, adv_prob = 0.2):
     print("Starting training with adversarial examples")
     criterion = nn.NLLLoss()
     optimizer = optim.SGD(net.parameters(), lr=0.01, momentum=0.9)
@@ -123,7 +123,7 @@ def train_model_adversarial(net, train_loader, pth_filename, num_epochs,
         for param_group in optimizer.param_groups:
             param_group['lr'] = lr
     
-    final_eps = 0.08
+    final_eps = 0.05
     final_alpha = 0.03
 
     for epoch in tqdm(range(num_epochs)): 
@@ -139,8 +139,8 @@ def train_model_adversarial(net, train_loader, pth_filename, num_epochs,
             # Decide whether to use adversarial examples or not
             if random.random() < adv_prob:
                 # Generate adversarial examples
-                #input_set = pgd_attack(net, inputs, labels, eps, alpha, iters)
-                input_set = pgd_attack_l2(net, inputs, labels, eps, alpha, iters)
+                input_set = pgd_attack(net, inputs, labels, eps, alpha, iters)
+                #input_set = pgd_attack_l2(net, inputs, labels, eps, alpha, iters)
             else:
                 input_set = inputs
 
