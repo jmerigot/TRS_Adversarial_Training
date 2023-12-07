@@ -352,7 +352,10 @@ def TRS_training(loader, valid_loader, model, num_epochs, save_path):
                 adv_outputs = model.models[j](adv_images).to(device)
                 _, predicted = torch.max(adv_outputs.data, 1)
                 accuracy_test[j] += (predicted == targets).sum().item()/targets.size(0)
-
+                
+            ensemble_output = model(adv_images).to(device)
+            _, predicted = torch.max(ensemble_output.data, 1)
+            accuracy_ensemble += (predicted == targets).sum().item()/targets.size(0)
 
 
             cos_loss, smooth_loss = 0, 0
@@ -392,10 +395,7 @@ def TRS_training(loader, valid_loader, model, num_epochs, save_path):
             valid_loss = loss_std + scale * (coeff * cos_loss + lamda * smooth_loss)
             valid_epoch_loss += valid_loss
 
-            ensemble_output = model(adv_x).to(device)
-            _, predicted = torch.max(ensemble_output.data, 1)
-            accuracy_ensemble += (predicted == targets).sum().item()/targets.size(0)
-            
+
         training_loss.append((epoch_loss/len(loader)).cpu().detach().numpy())
         validation_loss.append((valid_epoch_loss/len(loader)).cpu().detach().numpy())
         valid_accuracy_model_0.append(accuracy_test[0]/len(valid_loader))
@@ -453,8 +453,6 @@ def test_adversarial(net, test_loader, num_samples, eps=0.05, alpha=0.01, iters=
             adv_images = pgd_attack(net, images, labels, eps, alpha, iters)
         elif attack == "l2":
             adv_images = pgd_attack_l2(net, images, labels, eps, alpha, iters)
-        total = 0
-        correct = 0
         for _ in range(num_samples):
             outputs = net(adv_images)
             _, predicted = torch.max(outputs.data, 1)
