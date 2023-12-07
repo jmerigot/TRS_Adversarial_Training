@@ -106,8 +106,12 @@ class Net(nn.Module):
            add extra code in its body if you feel it is necessary, but
            beware that paths of files used in this function should be
            refered relative to the root of your project directory.
-        '''        
-        self.load(Net.model_file)
+        '''
+        paths = []
+
+        for path in model_file:
+            paths.append(os.path.join(project_dir, path))
+        self.load(paths)
 
 
 
@@ -193,15 +197,36 @@ def losses_plot(training_loss, validation_loss, save_path):
     plt.close()
 
 
-
-def accuracy_plot(valid_accuracy_model_0, valid_accuracy_model_1, valid_accuracy_model_2, valid_accuracy_ensemble, save_path):
+def accuracy_plot_models(valid_accuracy_model_0, valid_accuracy_model_1, valid_accuracy_model_2, valid_accuracy_ensemble_linf, save_path):
     num_epochs = [i+1 for i in range(len(valid_accuracy_model_0))]
     
     plt.figure(figsize=(10, 6))
-    plt.plot(num_epochs, valid_accuracy_model_0, label='Accuracy model 1')
-    plt.plot(num_epochs, valid_accuracy_model_1, label='Accuracy model 2')
-    plt.plot(num_epochs, valid_accuracy_model_2, label='Accuracy model 3')
-    plt.plot(num_epochs, valid_accuracy_ensemble, label='Accuracy ensemble model')
+    plt.plot(num_epochs, valid_accuracy_model_0, label='Accuracy model 1, attaque PGD linf')
+    plt.plot(num_epochs, valid_accuracy_model_1, label='Accuracy model 2, attaque PGD linf')
+    plt.plot(num_epochs, valid_accuracy_model_2, label='Accuracy model 3, attaque PGD linf')
+    plt.plot(num_epochs, valid_accuracy_ensemble_linf, label='Accuracy ensemble model, attaque PGD Linf')
+    plt.xlabel('Epochs')
+    plt.ylabel('Accuracy')
+    plt.title('Accuracy of models Over Epochs')
+    plt.legend()
+    plt.grid(True)
+
+    # Save the plot as a file
+    plt.savefig(save_path, format='png', dpi=300)
+
+    # Close the plot explicitly after saving
+    plt.close()
+
+
+
+
+def accuracy_plot(valid_accuracy_ensemble_natural, valid_accuracy_ensemble_linf, valid_accuracy_ensemble_l2, save_path):
+    num_epochs = [i+1 for i in range(len(valid_accuracy_ensemble_l2))]
+    
+    plt.figure(figsize=(10, 6))
+    plt.plot(num_epochs, valid_accuracy_ensemble_natural, label='Accuracy ensemble model, non attaqué')
+    plt.plot(num_epochs, valid_accuracy_ensemble_l2, label='Accuracy ensemble model, attaque PGD L2')
+    plt.plot(num_epochs, valid_accuracy_ensemble_linf, label='Accuracy ensemble model, attaque PGD Linf')
     plt.xlabel('Epochs')
     plt.ylabel('Accuracy')
     plt.title('Accuracy of models Over Epochs')
@@ -228,7 +253,7 @@ def Magnitude(g1):
 
 
 
-def TRS_training(loader, valid_loader, model, num_epochs, save_path):
+def TRS_training(loader, valid_loader, model, num_epochs, adv_prob, save_path):
     criterion = nn.CrossEntropyLoss()
 
     param = list(model.models[0].parameters())
@@ -252,7 +277,9 @@ def TRS_training(loader, valid_loader, model, num_epochs, save_path):
     valid_accuracy_model_0 = []
     valid_accuracy_model_1 = []
     valid_accuracy_model_2 = []
-    valid_accuracy_ensemble = []
+    valid_accuracy_ensemble_natural = []
+    valid_accuracy_ensemble_l2 = []
+    valid_accuracy_ensemble_linf = []
 
     for i in range(len(model.models)):
         model.models[i].train()
@@ -269,19 +296,32 @@ def TRS_training(loader, valid_loader, model, num_epochs, save_path):
         epoch_loss = 0
         valid_epoch_loss = 0
         accuracy_test = [0]*3
-        accuracy_ensemble = 0
+        accuracy_ensemble_natural = 0
+        accuracy_ensemble_linf = 0
+        accuracy_ensemble_l2 = 0
+
        
 
         for i, (inputs, targets) in tqdm(enumerate(loader)):
             inputs, targets = inputs.to(device), targets.to(device)
+            if random.random() < adv_prob:
+                # Generate adversarial examples
+                input_set = pgd_attack_l2(model, inputs, targets, eps, alpha, iters=20)
+            else:
+                input_set = inputs
+
+
             batch_size = inputs.size(0)
             inputs.requires_grad = True
+            input_set.requires_grad = True
             grads = []
             loss_std = 0
+
+
             for j in range(len(model.models)):
-                model_output = model.models[j](inputs).to(device)
+                model_output = model.models[j](input_set).to(device)
                 loss = criterion(model_output, targets)
-                grad = autograd.grad(loss, inputs, create_graph=True)[0]
+                grad = autograd.grad(loss, input_set, create_graph=True)[0]
                 grad = grad.flatten(start_dim=1)
                 grads.append(grad)
                 loss_std += loss
@@ -352,10 +392,23 @@ def TRS_training(loader, valid_loader, model, num_epochs, save_path):
                 adv_outputs = model.models[j](adv_images).to(device)
                 _, predicted = torch.max(adv_outputs.data, 1)
                 accuracy_test[j] += (predicted == targets).sum().item()/targets.size(0)
-                
+
+
+            ensemble_output = model(inputs).to(device)
+            _, predicted = torch.max(ensemble_output.data, 1)
+            accuracy_ensemble_natural += (predicted == targets).sum().item()/targets.size(0)
+
+            
+            adv_images = pgd_attack(model, inputs, targets, eps, alpha, iters=20).detach()
             ensemble_output = model(adv_images).to(device)
             _, predicted = torch.max(ensemble_output.data, 1)
-            accuracy_ensemble += (predicted == targets).sum().item()/targets.size(0)
+            accuracy_ensemble_linf += (predicted == targets).sum().item()/targets.size(0)
+
+            adv_images = pgd_attack_l2(model, inputs, targets, eps, alpha, iters=20).detach()
+            ensemble_output = model(adv_images).to(device)
+            _, predicted = torch.max(ensemble_output.data, 1)
+            accuracy_ensemble_l2 += (predicted == targets).sum().item()/targets.size(0)
+
 
 
             cos_loss, smooth_loss = 0, 0
@@ -389,9 +442,7 @@ def TRS_training(loader, valid_loader, model, num_epochs, save_path):
 
             smooth_loss /= 3
 
-            scale = 1/3
-            coeff = 100
-            lamda = 2.5
+
             valid_loss = loss_std + scale * (coeff * cos_loss + lamda * smooth_loss)
             valid_epoch_loss += valid_loss
 
@@ -401,7 +452,9 @@ def TRS_training(loader, valid_loader, model, num_epochs, save_path):
         valid_accuracy_model_0.append(accuracy_test[0]/len(valid_loader))
         valid_accuracy_model_1.append(accuracy_test[1]/len(valid_loader))
         valid_accuracy_model_2.append(accuracy_test[2]/len(valid_loader))
-        valid_accuracy_ensemble.append(accuracy_ensemble/len(valid_loader))
+        valid_accuracy_ensemble_natural.append(accuracy_ensemble_natural/len(valid_loader))
+        valid_accuracy_ensemble_l2.append(accuracy_ensemble_l2/len(valid_loader))        
+        valid_accuracy_ensemble_linf.append(accuracy_ensemble_linf/len(valid_loader))
 
 
 
@@ -410,13 +463,14 @@ def TRS_training(loader, valid_loader, model, num_epochs, save_path):
             print(f"valid_Loss = {valid_epoch_loss/len(valid_loader)}")
             for j in range(len(model.models)):
                 print(f"accuracy model {j} : {accuracy_test[j]/len(valid_loader)}")
-            print(f"accuracy ensemble model: {accuracy_ensemble/len(valid_loader)}")
-        
-
+            print(f"accuracy ensemble model natural: {accuracy_ensemble_natural/len(valid_loader)}")
+            print(f"accuracy ensemble model l2 : {accuracy_ensemble_l2/len(valid_loader)}")
+            print(f"accuracy ensemble model linf : {accuracy_ensemble_linf/len(valid_loader)}")
         
 
     losses_plot(training_loss, validation_loss, r'plot/losses_plot_vanilla.png')
-    accuracy_plot(valid_accuracy_model_0, valid_accuracy_model_1, valid_accuracy_model_2, valid_accuracy_ensemble, r'plot/accuracy_plot_vanilla.png')
+    accuracy_plot_models(valid_accuracy_model_0, valid_accuracy_model_1, valid_accuracy_model_2,  valid_accuracy_ensemble_linf, r'plot/accuracy_plot_vanilla_models.png')
+    accuracy_plot(valid_accuracy_ensemble_natural, valid_accuracy_ensemble_linf, valid_accuracy_ensemble_l2, r'plot/accuracy_plot_vanilla.png')
     print('Finished Adversarial Training')
 
 
@@ -533,7 +587,7 @@ def main():
         print("Avant entrainement : Model adversarial accuracy linf (valid): {} %".format(acc_adv_linf))
         print("Avant entrainement : Model adversarial accuracy l2 (valid): {} %".format(acc_adv_l2))
 
-        TRS_training(train_loader, valid_loader, net, num_epochs=15, save_path=Net.model_file)
+        TRS_training(train_loader, valid_loader, net, num_epochs=3, adv_prob=1, save_path=Net.model_file)
         print("Model save to '{}'.".format(Net.model_file))
         net.save(Net.model_file)
 
