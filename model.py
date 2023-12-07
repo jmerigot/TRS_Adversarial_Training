@@ -1,9 +1,10 @@
-#!/usr/bin/env python3 
+  #!/usr/bin/env python3 
 import os
 import argparse
 import torch
 import torchvision
 import numpy as np
+import matplotlib.pyplot as plt
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
@@ -55,49 +56,45 @@ class Neural_Network(nn.Module):
 
 
 
-
 class Net(nn.Module):
     
-    model_file = "models/trs_model.pth"
+    model_file = ["models/trained_model_1.pth", "models/trained_model_2.pth", "models/trained_model_3.pth"]
+    pretrained_file= ["models/adv_model.pth", "models/pgd_l2_model.pth", "models/FGSM_model.pth"]
+    
     '''This file will be loaded to test your model. Use --model-file to load/store a different model.'''
 
-    models = []
 
-    pgd_linf_model_path = "models/adv_model.pth"
-    pgd_l2_model_path = "models/pgd_l2_model.pth"
-    fgsm_model_path = "models/FGSM_model.pth"
-    model_paths = [pgd_linf_model_path, pgd_l2_model_path, fgsm_model_path]
-
-    for model_path in model_paths:
-        model = Neural_Network().to(device)
-        model.load(model_path)
-        models.append(model)
-
-    def __init__(self, models=models):
+    def __init__(self):
         super(Net, self).__init__()
-        self.models = models
+        self.models=[]
+        for i in range(3):
+            self.models.append(Neural_Network().to(device))## On initialise avec 3 models vierges et on les ecrasera si on veut en load d'autres 
     
     def forward(self, x):
         outputs = 0
         i = 1
         for model in self.models:
-            outputs += torch.exp(model(x))
-            #print(model(x)[0])
-            max_ind= torch.argmax(model(x)[0])
-            #print(f"L'output du model {i} est de {max_ind} ")
-            i += 1
+            outputs += torch.exp(model(x))# L'achitecture imposait d'avoir un log softmax à la fin du reseaux de neuronnes, on veut faire une moyenne de softmax donc on enleve temporairement le log et on le remettra à la fin
         output = outputs / len(self.models)
-        output = torch.clamp(output, min=1e-40)
-        return torch.log(output)
+        output = torch.clamp(output, min=1e-40) #Evite le log(0)
+        return torch.log(output) # on remet le log
         
 
 
     def save(self, model_file):
         '''Helper function, use it to save the model weights after training.'''
-        torch.save(self.state_dict(), model_file)
+        if len(model_file)==len(self.models):
+            for i in range(len(self.models)) :
+                self.models[i].save(model_file[i]) #On enregistre le model i avec le i-eme nom de model_file
+        else : 
+            print("Donner en argument du save autant de path que de modèls à  enregistrer")
 
     def load(self, model_file):
-        self.load_state_dict(torch.load(model_file, map_location=torch.device(device)))
+        self.models=[]#On ecrase les derniers les anciens models
+        for model_path in model_file:
+            model = Neural_Network().to(device)
+            model.load(model_path)
+            self.models.append(model)
 
         
     def load_for_testing(self, project_dir='./'):
@@ -110,107 +107,21 @@ class Net(nn.Module):
            beware that paths of files used in this function should be
            refered relative to the root of your project directory.
         '''        
-        self.load(os.path.join(project_dir, Net.model_file))
+        self.load(Net.model_file)
 
 
 
-def train_model(net, train_loader, pth_filename, num_epochs):
-    '''Basic training function (from pytorch doc.)'''
-    print("Starting training")
-    criterion = nn.NLLLoss()
-    optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
 
-    for epoch in range(num_epochs):  # loop over the dataset multiple times
 
-        running_loss = 0.0
-        for i, data in enumerate(train_loader, 0):
-            # get the inputs; data is a list of [inputs, labels]
-            inputs, labels = data[0].to(device), data[1].to(device)
-
-            # zero the parameter gradients
-            optimizer.zero_grad()
-
-            # forward + backward + optimize
-            outputs = net(inputs)
-            loss = criterion(outputs, labels)
-            loss.backward()
-            optimizer.step()
-
-            # print statistics
-            running_loss += loss.item()
-            if i % 500 == 499:    # print every 2000 mini-batches
-                print('[%d, %5d] loss: %.3f' %
-                      (epoch + 1, i + 1, running_loss / 2000))
-                running_loss = 0.0
-
-    net.save(pth_filename)
-    print('Model saved in {}'.format(pth_filename))
-    
 def update_eps_alpha(epoch, num_epochs, eps, final_eps, alpha, final_alpha):
     scale = epoch / (2 * num_epochs)
     new_epsilon = (final_eps - eps) * scale + eps
     new_alpha = (final_alpha - alpha) * scale + alpha
         
     return new_epsilon, new_alpha
-    
-def train_model_adversarial(net, train_loader, pth_filename, num_epochs, 
-                            eps=0.03, alpha=0.01, iters=20, step_size=1, gamma=1, adv_prob = 0.2):
-    print("Starting training with adversarial examples")
-    criterion = nn.NLLLoss()
-    optimizer = optim.SGD(net.parameters(), lr=0.01, momentum=0.9)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
-    
-    final_eps = 0.08
-    final_alpha = 0.03
 
-    for epoch in tqdm(range(num_epochs)):  
-        
-        eps, alpha = update_eps_alpha(epoch, num_epochs, eps, final_eps, alpha, final_alpha)
-        
-        running_loss = 0.0
-        for i, data in tqdm(enumerate(train_loader, 0)):
-            inputs, labels = data[0].to(device), data[1].to(device)
-            
-            # Decide whether to use adversarial examples or not
-            if random.random() < adv_prob:
-                # Generate adversarial examples
-                input_set = pgd_attack(net, inputs, labels, eps, alpha, iters)
-            else:
-                input_set = inputs
 
-            # Train on the chosen set (adversarial or natural)
-            optimizer.zero_grad()
-            outputs = net(input_set)
-            loss = criterion(outputs, labels)
-            loss.backward()
-            optimizer.step()
 
-            """
-            # Generate adversarial examples
-            #adv_inputs = pgd_attack(net, inputs, labels, eps, alpha, iters)
-            
-            # Train on both natural and adversarial examples
-            for input_set in [inputs, adv_inputs]:
-                optimizer.zero_grad()
-                outputs = net(input_set)
-                loss = criterion(outputs, labels)
-                loss.backward()
-                optimizer.step()
-            """
-
-            # print statistics
-            running_loss += loss.item()
-            if i % 500 == 499:    # print every 2000 mini-batches
-                print('[%d, %5d] loss: %.3f' %
-                      (epoch + 1, i + 1, running_loss / 2000))
-                running_loss = 0.0
-                
-        scheduler.step()
-
-    net.save(pth_filename)
-    print('Finished Adversarial Training')
-
-    
 def pgd_attack(model, images, labels, eps, alpha, iters):
     original_images = images.clone().detach()
     images = images.clone().detach().to(device)
@@ -227,6 +138,8 @@ def pgd_attack(model, images, labels, eps, alpha, iters):
         images = torch.clamp(original_images + eta, min=0, max=1).detach_()
         
     return images
+
+
 
 def pgd_attack_l2(model, images, labels, eps, alpha, iters):
     original_images = images.clone().detach().to(device)  # Only clone images once
@@ -261,19 +174,66 @@ def pgd_attack_l2(model, images, labels, eps, alpha, iters):
 
 
 
+def losses_plot(training_loss, validation_loss, save_path):
+    num_epochs = [i+1 for i in range(len(training_loss))]
+    
+    plt.figure(figsize=(10, 6))
+    plt.plot(num_epochs, training_loss, label='Training Loss')
+    plt.plot(num_epochs, validation_loss, label='Validation Loss')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.title('Training and Validation Loss Over Epochs')
+    plt.legend()
+    plt.grid(True)
+
+    # Save the plot as a file
+    plt.savefig(save_path, format='png', dpi=300)
+
+    # Close the plot explicitly after saving
+    plt.close()
+
+
+
+def accuracy_plot(valid_accuracy_model_0, valid_accuracy_model_1, valid_accuracy_model_2, valid_accuracy_ensemble, save_path):
+    num_epochs = [i+1 for i in range(len(valid_accuracy_model_0))]
+    
+    plt.figure(figsize=(10, 6))
+    plt.plot(num_epochs, valid_accuracy_model_0, label='Accuracy model 1')
+    plt.plot(num_epochs, valid_accuracy_model_1, label='Accuracy model 2')
+    plt.plot(num_epochs, valid_accuracy_model_2, label='Accuracy model 3')
+    plt.plot(num_epochs, valid_accuracy_ensemble, label='Accuracy ensemble model')
+    plt.xlabel('Epochs')
+    plt.ylabel('Accuracy')
+    plt.title('Accuracy of models Over Epochs')
+    plt.legend()
+    plt.grid(True)
+
+    # Save the plot as a file
+    plt.savefig(save_path, format='png', dpi=300)
+
+    # Close the plot explicitly after saving
+    plt.close()
+    
+
 
 def Cosine(g1, g2):
 	return torch.abs(F.cosine_similarity(g1, g2)).mean() 
 
+
+
 def Magnitude(g1):
 	return (torch.sum(g1**2,1)).mean() * 2
 
-def TRS_training(loader, valid_loader, models, num_epochs, save_path):
+
+
+
+
+def TRS_training(loader, valid_loader, model, num_epochs, save_path):
     criterion = nn.CrossEntropyLoss()
 
-    param = list(models[0].parameters())
-    for i in range(1, len(models)):
-        param.extend(list(models[i].parameters()))
+    param = list(model.models[0].parameters())
+    for i in range(1, len(model.models)):
+        param.extend(list(model.models[i].parameters()))
 
     lr = 0.001
     gamma=0.5
@@ -286,27 +246,30 @@ def TRS_training(loader, valid_loader, models, num_epochs, save_path):
     start_alpha = 0.01
     final_eps = 0.08
     final_alpha = 0.03
-
-    for i in range(len(models)):
-        models[i].train()
-        models[i].requires_grad = True
     
-    accuracy_test = [0]*3
-    for i, (inputs, targets) in enumerate(valid_loader):
-        inputs, targets = inputs.to(device), targets.to(device)
-        for j in range(len(models)):
-            adv_images = pgd_attack(models[j], inputs, targets, start_eps, start_alpha, iters=20).detach()
-            adv_outputs = models[j](adv_images).to(device)
-            _, predicted = torch.max(adv_outputs.data, 1)
-            accuracy_test[j] += (predicted == targets).sum().item()/targets.size(0)
-    for j in range(len(models)):
-        print(f"avant epoch : accuracy model {j} : {accuracy_test[j]/len(valid_loader)}")
+    training_loss = []
+    validation_loss = []
+    valid_accuracy_model_0 = []
+    valid_accuracy_model_1 = []
+    valid_accuracy_model_2 = []
+    valid_accuracy_ensemble = []
+
+    for i in range(len(model.models)):
+        model.models[i].train()
+        model.models[i].requires_grad = True
+    
 
     for epoch in tqdm(range(num_epochs)):  
+
+        for i in range(len(model.models)):
+            model.models[i].train()
+
+
         eps, alpha = update_eps_alpha(epoch, num_epochs, start_eps, final_eps, start_alpha, final_alpha)
         epoch_loss = 0
         valid_epoch_loss = 0
         accuracy_test = [0]*3
+        accuracy_ensemble = 0
        
 
         for i, (inputs, targets) in tqdm(enumerate(loader)):
@@ -315,8 +278,8 @@ def TRS_training(loader, valid_loader, models, num_epochs, save_path):
             inputs.requires_grad = True
             grads = []
             loss_std = 0
-            for j in range(len(models)):
-                model_output = models[j](inputs).to(device)
+            for j in range(len(model.models)):
+                model_output = model.models[j](inputs).to(device)
                 loss = criterion(model_output, targets)
                 grad = autograd.grad(loss, inputs, create_graph=True)[0]
                 grad = grad.flatten(start_dim=1)
@@ -332,16 +295,21 @@ def TRS_training(loader, valid_loader, models, num_epochs, save_path):
             cos_loss = (cos01 + cos02 + cos12) / 3.
 
             N = inputs.shape[0] // 2
+            m = N// 3
+    
             clean_inputs = inputs[:N].detach()
-            adv_linf_inputs = pgd_attack(models[0], inputs[N:], targets[N:], eps, alpha, iters=20).detach()
-            #adv_linf_inputs = pgd_attack(models[0], inputs[N: 2*N], targets[N: 2*N], eps, alpha, iters=10).detach()
-            #adv_l2_inputs = pgd_attack_l2(models[1], inputs[2*N :], targets[2*N :], eps, alpha, iters=10).detach()
+            adv_inputs_0 = pgd_attack(model.models[0], inputs[N:N+m], targets[N:N+m], eps, alpha, iters=20).detach()
+            adv_inputs_1 = pgd_attack(model.models[1], inputs[N+m:N+2*m], targets[N+m:N+2*m], eps, alpha, iters=20).detach()
+            adv_inputs_2 = pgd_attack(model.models[2], inputs[N+2*m:N+3*m], targets[N+2*m:N+3*m], eps, alpha, iters=20).detach()
+            #adv_linf_inputs = pgd_attack(model.models[0], inputs[N: 2*N], targets[N: 2*N], eps, alpha, iters=10).detach()
+            #adv_l2_inputs = pgd_attack_l2(model.models[1], inputs[2*N :], targets[2*N :], eps, alpha, iters=10).detach()
 
-            adv_x = torch.cat([clean_inputs, adv_linf_inputs])#, adv_l2_inputs])
+            adv_x = torch.cat([clean_inputs, adv_inputs_0, adv_inputs_1, adv_inputs_2])# adv_linf_inputs])
             adv_x.requires_grad = True
+            targets = targets[:adv_x.shape[0]]
 
-            for j in range(len(models)):
-                output = models[j](adv_x).to(device)
+            for j in range(len(model.models)):
+                output = model.models[j](adv_x).to(device)
                 loss = criterion(output, targets)
                 grad = autograd.grad(loss, adv_x, create_graph=True)[0]
                 grad = grad.flatten(start_dim=1)
@@ -360,7 +328,8 @@ def TRS_training(loader, valid_loader, models, num_epochs, save_path):
             optimizer.step()
           
 
-            ensemble = Net(models)
+        for i in range(len(model.models)):
+            model.models[i].eval()
 
         scheduler.step()
 
@@ -370,8 +339,8 @@ def TRS_training(loader, valid_loader, models, num_epochs, save_path):
             inputs.requires_grad = True
             grads = []
             loss_std = 0
-            for j in range(len(models)):
-                model_output = models[j](inputs)
+            for j in range(len(model.models)):
+                model_output = model.models[j](inputs)
                 loss = criterion(model_output, targets)
                 grad = autograd.grad(loss, inputs, create_graph=True)[0]
                 grad = grad.flatten(start_dim=1)
@@ -379,8 +348,8 @@ def TRS_training(loader, valid_loader, models, num_epochs, save_path):
                 loss_std += loss
 
                 
-                adv_images = pgd_attack(models[j], inputs, targets, eps, alpha, iters=20).detach()
-                adv_outputs = models[j](adv_images).to(device)
+                adv_images = pgd_attack(model.models[j], inputs, targets, eps, alpha, iters=20).detach()
+                adv_outputs = model.models[j](adv_images).to(device)
                 _, predicted = torch.max(adv_outputs.data, 1)
                 accuracy_test[j] += (predicted == targets).sum().item()/targets.size(0)
 
@@ -395,16 +364,21 @@ def TRS_training(loader, valid_loader, models, num_epochs, save_path):
             cos_loss = (cos01 + cos02 + cos12) / 3.
 
             N = inputs.shape[0] // 2
+            m = N// 3
+
             clean_inputs = inputs[:N].detach()
-            adv_linf_inputs = pgd_attack(models[0], inputs[N:], targets[N:], eps, alpha, iters=20).detach()
-            # adv_linf_inputs = pgd_attack(models[0], inputs[N: 2*N], targets[N: 2*N], eps, alpha, iters=20).detach()
-            # adv_l2_inputs = pgd_attack_l2(models[1], inputs[2*N :], targets[2*N :], eps, alpha, iters=20).detach()
+            adv_inputs_0 = pgd_attack(model.models[0], inputs[N:N+m], targets[N:N+m], eps, alpha, iters=20).detach()
+            adv_inputs_1 = pgd_attack(model.models[1], inputs[N+m:N+2*m], targets[N+m:N+2*m], eps, alpha, iters=20).detach()
+            adv_inputs_2 = pgd_attack(model.models[2], inputs[N+2*m:N+3*m], targets[N+2*m:N+3*m], eps, alpha, iters=20).detach()
+            #adv_linf_inputs = pgd_attack(model.models[0], inputs[N: 2*N], targets[N: 2*N], eps, alpha, iters=10).detach()
+            #adv_l2_inputs = pgd_attack_l2(model.models[1], inputs[2*N :], targets[2*N :], eps, alpha, iters=10).detach()
 
-            adv_x = torch.cat([clean_inputs, adv_linf_inputs])#, adv_l2_inputs])
+            adv_x = torch.cat([clean_inputs, adv_inputs_0, adv_inputs_1, adv_inputs_2])# adv_linf_inputs])
             adv_x.requires_grad = True
+            targets = targets[:adv_x.shape[0]]
 
-            for j in range(len(models)):
-                output = models[j](adv_x)
+            for j in range(len(model.models)):
+                output = model.models[j](adv_x)
                 loss = criterion(output, targets)
                 grad = autograd.grad(loss, adv_x, create_graph=True)[0]
                 grad = grad.flatten(start_dim=1)
@@ -418,20 +392,34 @@ def TRS_training(loader, valid_loader, models, num_epochs, save_path):
             valid_loss = loss_std + scale * (coeff * cos_loss + lamda * smooth_loss)
             valid_epoch_loss += valid_loss
 
+            ensemble_output = model(adv_x).to(device)
+            _, predicted = torch.max(ensemble_output.data, 1)
+            accuracy_ensemble += (predicted == targets).sum().item()/targets.size(0)
+            
+        training_loss.append((epoch_loss/len(loader)).cpu().detach().numpy())
+        validation_loss.append((valid_epoch_loss/len(loader)).cpu().detach().numpy())
+        valid_accuracy_model_0.append(accuracy_test[0]/len(valid_loader))
+        valid_accuracy_model_1.append(accuracy_test[1]/len(valid_loader))
+        valid_accuracy_model_2.append(accuracy_test[2]/len(valid_loader))
+        valid_accuracy_ensemble.append(accuracy_ensemble/len(valid_loader))
+
 
 
         if epoch%1 == 0:
             print(f"Epoch {epoch} : \n Loss = {epoch_loss/len(loader)}")
             print(f"valid_Loss = {valid_epoch_loss/len(valid_loader)}")
-            for j in range(len(models)):
+            for j in range(len(model.models)):
                 print(f"accuracy model {j} : {accuracy_test[j]/len(valid_loader)}")
-  
-
+            print(f"accuracy ensemble model: {accuracy_ensemble/len(valid_loader)}")
+        
 
         
-    
-    ensemble.save(save_path)
+
+    losses_plot(training_loss, validation_loss, r'plot/losses_plot_vanilla.png')
+    accuracy_plot(valid_accuracy_model_0, valid_accuracy_model_1, valid_accuracy_model_2, valid_accuracy_ensemble, r'plot/accuracy_plot_vanilla.png')
     print('Finished Adversarial Training')
+
+
 
 
 def test_natural(net, test_loader):
@@ -452,6 +440,31 @@ def test_natural(net, test_loader):
 
     return 100 * correct / total
 
+
+
+
+def test_adversarial(net, test_loader, num_samples, eps=0.05, alpha=0.01, iters=20, attack='linf'):
+    correct = 0
+    total = 0
+
+    for i, data in enumerate(test_loader, 0):
+        images, labels = data[0].to(device), data[1].to(device)
+        if attack == 'linf':
+            adv_images = pgd_attack(net, images, labels, eps, alpha, iters)
+        elif attack == "l2":
+            adv_images = pgd_attack_l2(net, images, labels, eps, alpha, iters)
+        total = 0
+        correct = 0
+        for _ in range(num_samples):
+            outputs = net(adv_images)
+            _, predicted = torch.max(outputs.data, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+
+    return 100 * correct / total
+
+
+
 def get_train_loader(dataset, valid_size=1024, batch_size=16):
     '''Split dataset into [train:valid] and return a DataLoader for the training part.'''
 
@@ -460,6 +473,8 @@ def get_train_loader(dataset, valid_size=1024, batch_size=16):
     train = torch.utils.data.DataLoader(dataset, sampler=train_sampler, batch_size=batch_size)
 
     return train
+
+
 
 def get_validation_loader(dataset, valid_size=1024, batch_size=16):
     '''Split dataset into [train:valid] and return a DataLoader for the validation part.'''
@@ -470,68 +485,79 @@ def get_validation_loader(dataset, valid_size=1024, batch_size=16):
 
     return valid
 
+
+
+
 def main():
 
     #### Parse command line arguments 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model-file", default=Net.model_file,
-                        help="Name of the file used to load or to sore the model weights."\
-                        "If the file exists, the weights will be load from it."\
-                        "If the file doesn't exists, or if --force-train is set, training will be performed, "\
-                        "and the model weights will be stored in this file."\
-                        "Warning: "+Net.model_file+" will be used for testing (see load_for_testing()).")
+    parser.add_argument("-p", '--pretrained', action="store_true")# si on veut utiliser des modèles préentrainés pour initialiser le modèle ensemblise 
     parser.add_argument('-t', '--trs', action="store_true",
                         help="Using TRS training.")
-    parser.add_argument('-f', '--force-train', action="store_true",
-                        help="Force training even if model file already exists"\
-                             "Warning: previous model file will be erased!).")
-    parser.add_argument('-e', '--num-epochs', type=int, default=20,
-                        help="Set the number of epochs during training")
     args = parser.parse_args()
+
+
 
     #### Create model and move it to whatever device is available (gpu/cpu)
     net = Net()
     net.to(device)
     
+    train_transform = transforms.Compose([transforms.ToTensor()]) 
+    cifar_train = torchvision.datasets.CIFAR10('./data/', download=True, transform=train_transform)
+    train_loader = get_train_loader(cifar_train, valid_size, batch_size=batch_size)
+    
+    cifar_valid = torchvision.datasets.CIFAR10('./data/', download=True, transform=transforms.ToTensor()) 
+    valid_loader = get_validation_loader(cifar_valid, valid_size)
+    
+    acc = test_natural(net, valid_loader)
+    acc_adv_linf = test_adversarial(net, valid_loader, num_samples=1, attack='linf')
+    acc_adv_l2 = test_adversarial(net, valid_loader, num_samples=1, attack='l2')
+
+    print("Avant load : Model natural accuracy (valid): {} %".format(acc))
+    print("Avant load : Model adversarial accuracy linf (valid): {} %".format(acc_adv_linf))
+    print("Avant load :  Model adversarial accuracy l2 (valid): {} %".format(acc_adv_l2))
+
     #### Model training (if necessary)
-    if not os.path.exists(args.model_file) or args.force_train:
-        print("Training model")
-        print(args.model_file)
+    
+    
+    #Si on veut utiliser des models préentrainés, il faut modifier les paths au début de la définition de la class Net
+    if args.pretrained:
+        net.load(Net.pretrained_file)
 
-        train_transform = transforms.Compose([transforms.ToTensor()]) 
-        cifar_train = torchvision.datasets.CIFAR10('./data/', download=True, transform=train_transform)
-        train_loader = get_train_loader(cifar_train, valid_size, batch_size=batch_size)
-        
-        cifar_valid = torchvision.datasets.CIFAR10('./data/', download=True, transform=transforms.ToTensor()) 
-        valid_loader = get_validation_loader(cifar_valid, valid_size)
+    if args.trs:
 
-        #train_model(net, train_loader, args.model_file, args.num_epochs)
-        
-        if args.force_train:
-            train_model_adversarial(net, train_loader, args.model_file, args.num_epochs)
-            print("Model save to '{}'.".format(args.model_file))
-            
-        elif args.trs:
-            TRS_training(train_loader, valid_loader, net.models, num_epochs=10, save_path="models/trs_model.pth")
-            print("Model save to '{}'.".format(args.model_file))
-            
+        acc = test_natural(net, valid_loader)
+        acc_adv_linf = test_adversarial(net, valid_loader, num_samples=1, attack='linf')
+        acc_adv_l2 = test_adversarial(net, valid_loader, num_samples=1, attack='l2')
 
-    #### Model testing
-    print("Testing with model from '{}'. ".format(args.model_file))
+        print("Avant entrainement : Model natural accuracy (valid): {} %".format(acc))
+        print("Avant entrainement : Model adversarial accuracy linf (valid): {} %".format(acc_adv_linf))
+        print("Avant entrainement : Model adversarial accuracy l2 (valid): {} %".format(acc_adv_l2))
+
+        TRS_training(train_loader, valid_loader, net, num_epochs=15, save_path=Net.model_file)
+        print("Model save to '{}'.".format(Net.model_file))
+        net.save(Net.model_file)
+
+
+
+
+    #### Model testing ####
+    net = Net()
+    net.load(Net.model_file)
+
+    print("Testing with model from '{}'. ".format(Net.model_file))
 
     # Note: You should not change the transform applied to the
     # validation dataset since, it will be the only transform used
 
-    net.load(args.model_file)
-
     acc = test_natural(net, valid_loader)
-    print("Model natural accuracy (valid): {} %".format(acc))
+    acc_adv_linf = test_adversarial(net, valid_loader, num_samples=1, attack='linf')
+    acc_adv_l2 = test_adversarial(net, valid_loader, num_samples=1, attack='l2')
 
-    if args.model_file != Net.model_file:
-        print("Warning: '{0}' is not the default model file, "\
-              "it will not be the one used for testing your project. "\
-              "If this is your best model, "\
-              "you should rename/link '{0}' to '{1}'.".format(args.model_file, Net.model_file))
+    print("Model natural accuracy (valid): {} %".format(acc))
+    print("Model adversarial accuracy linf (valid): {} %".format(acc_adv_linf))
+    print("Model adversarial accuracy l2 (valid): {} %".format(acc_adv_l2))
 
 if __name__ == "__main__":
     main()
