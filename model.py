@@ -109,7 +109,7 @@ class Net(nn.Module):
         '''
         paths = []
 
-        for path in model_file:
+        for path in Net.model_file:
             paths.append(os.path.join(project_dir, path))
         self.load(paths)
 
