@@ -544,9 +544,17 @@ def main():
 
     #### Parse command line arguments 
     parser = argparse.ArgumentParser()
+    parser.add_argument("--model-file", type=str,
+                        help="Name of the file used to load or to sore the model weights."\
+                        "If the file exists, the weights will be load from it."\
+                        "If the file doesn't exists, or if --force-train is set, training will be performed, "\
+                        "and the model weights will be stored in this file."\
+                        )
     parser.add_argument("-p", '--pretrained', action="store_true")# si on veut utiliser des modèles préentrainés pour initialiser le modèle ensemblise 
     parser.add_argument('-t', '--trs', action="store_true",
                         help="Using TRS training.")
+    parser.add_argument('-e', '--num-epochs', type=int, default=5,
+                        help="Set the number of epochs during training")
     args = parser.parse_args()
 
 
@@ -577,6 +585,9 @@ def main():
     if args.pretrained:
         net.load(Net.pretrained_file)
 
+    if args.model_file:
+        Net.model_file = args.model_file.split()
+
     if args.trs:
 
         acc = test_natural(net, valid_loader)
@@ -587,7 +598,7 @@ def main():
         print("Avant entrainement : Model adversarial accuracy linf (valid): {} %".format(acc_adv_linf))
         print("Avant entrainement : Model adversarial accuracy l2 (valid): {} %".format(acc_adv_l2))
 
-        TRS_training(train_loader, valid_loader, net, num_epochs=6, adv_prob=0.8, save_path=Net.model_file)
+        TRS_training(train_loader, valid_loader, net, num_epochs=7, adv_prob=0.8, save_path=Net.model_file)
         print("Model save to '{}'.".format(Net.model_file))
         net.save(Net.model_file)
 
