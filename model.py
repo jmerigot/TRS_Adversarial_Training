@@ -587,7 +587,7 @@ def main():
         print("Avant entrainement : Model adversarial accuracy linf (valid): {} %".format(acc_adv_linf))
         print("Avant entrainement : Model adversarial accuracy l2 (valid): {} %".format(acc_adv_l2))
 
-        TRS_training(train_loader, valid_loader, net, num_epochs=4, adv_prob=0.8, save_path=Net.model_file)
+        TRS_training(train_loader, valid_loader, net, num_epochs=6, adv_prob=0.8, save_path=Net.model_file)
         print("Model save to '{}'.".format(Net.model_file))
         net.save(Net.model_file)
 
